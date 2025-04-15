@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swagger UI</title>
+
+    <!-- Swagger UI Stylesheet from CDN -->
+    <link rel="stylesheet" type="text/css" href="dist/swagger-ui.css">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #swagger-ui {
+            margin: 0;
+            padding: 20px;
+        }
+
+        .swagger-ui .topbar {
+            display: none;
+        }
+
+        #header {
+            padding: 1em;
+            gap: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+        }
+
+        #header>select,
+        #header>input,
+        #header>button {
+            padding: 6px 11px;
+        }
+    </style>
+    <script>
+        window.onload = async () => {
+            if (!window.keplr) {
+                alert("Please install the Keplr extension.");
+                return;
+            }
+        };
+    </script>
+</head>
+
+<body>
+    <div id="header">
+        <input id="contract-address" type="text" placeholder="Contract Address" style="flex: 5" />
+        <select id="network" name="chainid" style="flex: 1">
+            <option value="{'rpc':'https://juno-rpc.publicnode.com', 'chainId':'juno-1'}">Juno Mainnet</option>
+            <option value="{'rpc':'https://lcd.terra.dev', 'chainId':'columbus-5'}">Terra Classic</option>
+            <option value="{'rpc':'', 'chainId':'uni-6'}">Juno Testnet (uni-6)</option>
+            <option value="{'rpc':'http://localhost:1337', 'chainId':'wasmd-1'}">Wasmd (localhost)</option>
+        </select>
+
+        <button id="keplr-connect" value="Connect Keplr" style="flex: 1">Connect Keplr</button>
+    </div>
+    <!-- This div will hold the Swagger UI interface -->
+    <div id="swagger-ui"></div>
+
+    <!-- Swagger UI JavaScript from CDN -->
+    <script src="dist/swagger-ui-standalone-preset.js"></script>
+
+    <script type="module">
+        import SwaggerUI from "https://cdn.skypack.dev/swagger-ui-dist/swagger-ui-bundle";
+        import { SigningCosmWasmClient } from "https://esm.sh/@cosmjs/cosmwasm-stargate@0.33.1?bundle&target=es2022&browser";
+
+        const cosmWasmPlugin = {
+            fn: {
+                execute: async (req) => {
+                    try {
+                        if (!window.cosmWasm) {
+                            alert("Please connect your wallet.", "Keplr not connected!");
+                        }
+
+                        const startTime = Date.now();
+
+                        const swaggerDocument = await fetch("/api").then((res) => res.json());
+
+                        const to = window.connection.contractAddress;
+
+                        if (!to) throw new Error("Missing required parameter: contractAddress");
+                        const paramValues = [];
+                        const pathVariant = swaggerDocument.paths[req.pathName]["x-variant"];
+                        let body = {};
+                        body[pathVariant.name] = {};
+                        Object.entries(req.parameters).forEach(([key, value]) => {
+                            const paramName = key.replace("query.", "");
+                            const param = pathVariant.parameters[paramName];
+                            console.log(paramName, " => ", param);
+                            if (param) {
+                                let formattedValue = value;
+                                if (["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64"].includes(param.t)) {
+                                    console.log("param", key, "is a number.");
+                                    formattedValue = Number.parse(formattedValue);
+                                }
+                                body[pathVariant.name][paramName] = formattedValue;
+                            }
+                        });
+                        console.log(body);
+
+
+
+                        const functionName = req.pathName.replace("/", "");
+
+
+                        const isReadOnly = pathVariant.read_call;
+
+                        const client = window.cosmWasm;
+                        if (isReadOnly) {
+                            const res = await client.queryContractSmart(window.connection.contractAddress, body);
+                            console.log(res);
+                            return {
+                                status: 200,
+                                statusText: "OK",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                },
+                                data: {},
+                            };
+                        } else {
+
+                        }
+
+                    } catch (error) {
+
+                        console.error("Error executing provider request:", error);
+                        return { status: 500, data: { message: error.message } };
+                    }
+                },
+            },
+        };
+
+        const ui = SwaggerUI({
+            url: "api",  // Replace with the path to your Swagger JSON/YAML file
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUI.presets.apis,
+                SwaggerUIStandalonePreset
+            ],
+            plugins: [cosmWasmPlugin],
+            layout: "StandaloneLayout"
+        });
+
+        const contractAddressInput = document.getElementById("contract-address");
+        contractAddressInput.addEventListener("input", (e) => {
+            window.connection["contractAddress"] = contractAddressInput.value;
+            console.log("Contract address updated.");
+        });
+
+        const networkInput = document.getElementById("network");
+        network.addEventListener("input", (e) => {
+            window.connection["network"] = networkInput.value.replaceAll("'", "\"");
+            console.log("Network updated.");
+        });
+
+
+        window.connection = {
+            contractAddress: undefined,
+            network: JSON.parse(networkInput.children[0].value.replaceAll("'", "\"")),
+        };
+
+        const keplrConnect = document.getElementById("keplr-connect");
+        keplrConnect.addEventListener("click", (e) => {
+            const connect = async () => {
+                const keplr = window.keplr;
+                const chainId = window.connection.network.chainId;
+                await keplr.enable(chainId);
+                const offlineSigner = keplr.getOfflineSigner(chainId);
+                // Note: This line is necessary to set the sender address for the SigningCosmosClient.
+                const accounts = await offlineSigner.getAccounts();
+                const client = await SigningCosmWasmClient.connectWithSigner(
+                    window.connection.network.rpc,
+                    offlineSigner,
+                );
+                window.cosmWasm = client;
+            }
+            connect();
+        });
+    </script>
+</body>
+
+</html>

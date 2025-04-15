@@ -6,11 +6,13 @@ pub mod commands;
 pub mod error;
 pub mod executable;
 pub mod idl_loader;
-pub mod processor;
+pub mod idl_processor;
+pub mod consts;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
-    if let Err(x) = Cli::run_cli() {
+    if let Err(x) = Cli::run_cli().await {
         eprintln!("Error! {}", x);
         exit(1);
     }
