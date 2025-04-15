@@ -5,7 +5,7 @@ use log::trace;
 use crate::error::CliError;
 
 pub trait Executable {
-    fn execute(&self, ctx: &ExecutionContext) -> Result<(), CliError>;
+    async fn execute(&self, ctx: &ExecutionContext) -> Result<(), CliError>;
 }
 
 pub struct ExecutionContext {

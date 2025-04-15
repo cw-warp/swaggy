@@ -1,6 +1,10 @@
 # CosmWasm Swaggy
 
-A tool designed to make documenting your CosmWasm Smart Contract easier. It creates a self-contained, standalone .html file containing the entire documentation of the contract in the OpenAPI fornat, bundled with the SwaggerUI to display it effortlkesssly.
+A tool designed to make documenting your CosmWasm Smart Contract easier. Generate the documentation for your contract ***with a single command!***
+
+It can generate OpenAPI spec for your smart contracts, as well as display the docs in the browser. Did we mention that the docs are interactive and all methods can be called visually with your Keplr wallet? 
+
+![Swaggy automatically generates documentation from your contract's code](preview.png)
 
 ## The Problem
 
@@ -24,3 +28,24 @@ The goal of the project is to allow for the following operations on CosmWasm sma
 * Documentation of all major endpoints that a contract exposes publically: `Instantiate`, `Execute` messages, and `Query` messages
 * Support for executing each message according to schema defined in the CW project - query and publish tx to the chain through Swagger
 * Provide the option to adjust the network (mainnet, testnet, localhost, etc) and a chain selector
+
+## Usage
+
+`swaggy` is currently able to run two subcommands
+
+```
+Usage: swaggy <COMMAND>
+
+Commands:
+  build  Build a swagger.json file from the contract schema
+  serve  Serve the swagger spec
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+  ```
+
+  * `build` creates an openAPI-compatible file with special metadata that describes all functions of the contract
+  * `serve` starts an HTTP server at `localhost` that displays the spec as fully graphical documentation
+
+  

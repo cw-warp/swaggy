@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::{
-    commands::build::BuildCmd,
+    commands::{build::BuildCmd, serve::ServeCmd},
     error::CliError,
     executable::{Executable, ExecutionContext},
 };
@@ -16,6 +16,8 @@ pub struct Cli {
 pub enum Command {
     /// Build a swagger.json file from the contract schema
     Build(BuildCmd),
+    /// Serve the swagger spec
+    Serve(ServeCmd),
 }
 
 impl Cli {
@@ -33,13 +35,14 @@ impl Cli {
     ///     }
     /// }
     /// ```
-    pub fn run_cli() -> Result<(), CliError> {
+    pub async fn run_cli() -> Result<(), CliError> {
         let parser = Cli::parse();
 
         // Set up execution context and execute the command.
         let ctx = ExecutionContext::try_load()?;
         match parser.command {
-            Command::Build(x) => x.execute(&ctx),
+            Command::Build(x) => x.execute(&ctx).await,
+            Command::Serve(x) => x.execute(&ctx).await,
         }
     }
 }
