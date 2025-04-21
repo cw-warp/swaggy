@@ -1,6 +1,5 @@
 use std::{env, path::PathBuf};
 
-use foyer::{Cache, CacheBuilder};
 use log::trace;
 
 use crate::error::CliError;

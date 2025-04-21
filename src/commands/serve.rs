@@ -1,11 +1,10 @@
-use std::{fs, io, path::PathBuf, sync::Arc, vec};
+use std::path::PathBuf;
 
 use axum::{
-    body::Bytes, extract::State, http::{header, HeaderMap, HeaderValue, Response, StatusCode}, response::{Html, IntoResponse}, routing::get, Json, Router
+    body::Bytes, extract::State, http::{header, HeaderMap, StatusCode}, response::{Html, IntoResponse}, routing::get, Json, Router
 };
 use clap::Args;
 use serde_json::Value;
-use tokio::sync::RwLock;
 
 use crate::{
     error::CliError,
@@ -29,8 +28,8 @@ pub struct RouterData {
 }
 
 impl Executable for ServeCmd {
-    async fn execute(&self, ctx: &ExecutionContext) -> Result<(), CliError> {
-        let dir_string = self.schema.to_string_lossy().to_string();
+    async fn execute(&self, _ctx: &ExecutionContext) -> Result<(), CliError> {
+        let _dir_string = self.schema.to_string_lossy().to_string();
         let spec = std::fs::read(&self.schema)?;
         let json_spec: Value = serde_json::from_slice(&spec)?;
 

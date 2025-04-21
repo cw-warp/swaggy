@@ -1,8 +1,6 @@
 pub mod error;
 pub mod idl;
 use error::IdlError;
-use idl::Idl;
-use openapiv3::{Info, OpenAPI};
 use serde_json::Value;
 
 pub fn try_load(dir: &str) -> Result<Value, IdlError> {

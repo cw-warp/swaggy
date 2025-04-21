@@ -1,0 +1,55 @@
+name: Release Rust Crate
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write  # Required for creating GitHub releases
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal # minimal profile (no docs or extra tools)
+          override: true
+        
+      - name: Build release binaries
+        run: cargo build --release
+
+      - name: Extract crate version
+        id: crate-version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.crate-version.outputs.version }}
+          name: Release v${{ steps.crate-version.outputs.version }}
+          body: |
+            Automated release for version v${{ steps.crate-version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload binary to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/swaggy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}

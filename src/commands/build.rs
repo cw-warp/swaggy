@@ -18,7 +18,7 @@ pub struct BuildCmd {
 }
 
 impl Executable for BuildCmd {
-    async fn execute(&self, ctx: &ExecutionContext) -> Result<(), CliError> {
+    async fn execute(&self, _ctx: &ExecutionContext) -> Result<(), CliError> {
         let dir_string = self.schema.to_string_lossy().to_string();
         let idl = crate::idl_loader::try_load(&dir_string)?;
         info!("IDL file loaded successfully.");

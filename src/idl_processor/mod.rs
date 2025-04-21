@@ -198,7 +198,7 @@ fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: 
                 parameters,
                 read_call,
             };
-            if(single_variant) {
+            if single_variant {
                 println!("\n{:?}", &v_item);
             }
             variants.push(v_item);
