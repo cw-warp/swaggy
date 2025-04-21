@@ -63,12 +63,27 @@
     <!-- This div will hold the Swagger UI interface -->
     <div id="swagger-ui"></div>
 
-    <!-- Swagger UI JavaScript from CDN -->
+    <script src="dist/swagger-ui-bundle.js"></script>
     <script src="dist/swagger-ui-standalone-preset.js"></script>
 
     <script type="module">
-        import SwaggerUI from "https://cdn.skypack.dev/swagger-ui-dist/swagger-ui-bundle";
-        import { SigningCosmWasmClient } from "https://esm.sh/@cosmjs/cosmwasm-stargate@0.33.1?bundle&target=es2022&browser";
+        import { SigningCosmWasmClient } from "https://esm.sh/@cosmjs/cosmwasm-stargate@0.33.1?bundle&browser";
+        import { Decimal } from "https://esm.sh/@cosmjs/math@0.33.1?bundle&browser";
+
+
+        const createResponse = (result) => {
+            return {
+                status: 200,
+                headers: { "content-type": "application/json" },
+                url: "https://keplr.app/",
+                notDocumented: false,
+                ok: true,
+                error: false,
+                err: null,
+                text: JSON.stringify(stringifyBigInts(result)),
+                duration: 3200,
+            }
+        }
 
         const cosmWasmPlugin = {
             fn: {
@@ -83,8 +98,9 @@
                         const swaggerDocument = await fetch("/api").then((res) => res.json());
 
                         const to = window.connection.contractAddress;
+                        const functionName = req.pathName.replace("/", "");
 
-                        if (!to) throw new Error("Missing required parameter: contractAddress");
+                        if (!to && functionName != "InstantiateMsg") throw new Error("Missing required parameter: contractAddress");
                         const paramValues = [];
                         const pathVariant = swaggerDocument.paths[req.pathName]["x-variant"];
                         let body = {};
@@ -106,7 +122,6 @@
 
 
 
-                        const functionName = req.pathName.replace("/", "");
 
 
                         const isReadOnly = pathVariant.read_call;
@@ -114,17 +129,25 @@
                         const client = window.cosmWasm;
                         if (isReadOnly) {
                             const res = await client.queryContractSmart(window.connection.contractAddress, body);
-                            console.log(res);
-                            return {
-                                status: 200,
-                                statusText: "OK",
-                                headers: {
-                                    "Content-Type": "application/json"
-                                },
-                                data: {},
-                            };
-                        } else {
+                            return createResponse(res);
+                        } else if (functionName == "InstantiateMsg") {
+                            if (!window.connection.codeId) {
+                                const wasmBytecode = await fetch("/wasm").then((o) => o.arrayBuffer());
+                                let uploadRes = await client.upload(window.sender, wasmBytecode, "auto");
+                                const codeId = uploadRes.codeId;
+                                window.connection.codeId = codeId;
+                            }
 
+                            console.log(body[functionName]);
+                            const initRes = await client.instantiate(window.sender, window.connection.codeId, body[functionName], "Contract", "auto");
+                            document.getElementById("contract-address").value = initRes.contractAddress;
+                            window.connection.contractAddress = initRes.contractAddress;
+
+                            return createResponse(initRes);
+                        } else {
+                            const res = await client.execute(window.sender, window.connection.contractAddress, body, "auto");
+                            console.log(res);
+                            return createResponse(res);
                         }
 
                     } catch (error) {
@@ -136,16 +159,32 @@
             },
         };
 
-        const ui = SwaggerUI({
+        function stringifyBigInts(obj) {
+            if (typeof obj === 'bigint') {
+                return obj.toString();
+            } else if (Array.isArray(obj)) {
+                return obj.map(stringifyBigInts);
+            } else if (obj && typeof obj === 'object') {
+                const newObj = {};
+                for (const key in obj) {
+                    newObj[key] = stringifyBigInts(obj[key]);
+                }
+                return newObj;
+            } else {
+                return obj;
+            }
+        }
+
+        const ui = SwaggerUIBundle({
             url: "api",  // Replace with the path to your Swagger JSON/YAML file
             dom_id: '#swagger-ui',
-            deepLinking: true,
             presets: [
-                SwaggerUI.presets.apis,
-                SwaggerUIStandalonePreset
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIStandalonePreset,
             ],
+            showMutatedRequest: false,
             plugins: [cosmWasmPlugin],
-            layout: "StandaloneLayout"
+            layout: "BaseLayout"
         });
 
         const contractAddressInput = document.getElementById("contract-address");
@@ -175,11 +214,23 @@
                 const offlineSigner = keplr.getOfflineSigner(chainId);
                 // Note: This line is necessary to set the sender address for the SigningCosmosClient.
                 const accounts = await offlineSigner.getAccounts();
+                const chainInfo = await keplr.getChainInfoWithoutEndpoints(chainId);
+
                 const client = await SigningCosmWasmClient.connectWithSigner(
                     window.connection.network.rpc,
                     offlineSigner,
+                    {
+                        gasPrice: {
+                            amount: Decimal.fromUserInput(
+                                "0.02",
+                                chainInfo.feeCurrencies[0].coinDecimals
+                            ),
+                            denom: chainInfo.feeCurrencies[0].coinDenom,
+                        }
+                    }
                 );
                 window.cosmWasm = client;
+                window.sender = accounts[0].address;
             }
             connect();
         });

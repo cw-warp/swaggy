@@ -3,8 +3,18 @@ name = "swaggy"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
+opt-level = "z"
+debug = false
+panic = "abort"
+incremental = true
+
 [dependencies]
 axum = "0.8.3"
+base64 = "0.22.1"
 clap = { version = "4.5.35", features = ["derive"] }
 env_logger = "0.11.8"
 indexmap = "2.9.0"
@@ -15,4 +25,5 @@ serde = "1.0.219"
 serde_json = "1.0.140"
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["full"] }
-
+z85 = "3.0.6"
+foyer = "0.16"

@@ -12,6 +12,7 @@ pub mod consts;
 #[tokio::main]
 async fn main() {
     env_logger::init();
+
     if let Err(x) = Cli::run_cli().await {
         eprintln!("Error! {}", x);
         exit(1);

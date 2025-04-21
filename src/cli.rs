@@ -36,7 +36,7 @@ impl Cli {
     /// }
     /// ```
     pub async fn run_cli() -> Result<(), CliError> {
-        let parser = Cli::parse();
+        let parser = Cli::parse();    
 
         // Set up execution context and execute the command.
         let ctx = ExecutionContext::try_load()?;

@@ -1,5 +1,6 @@
 use std::{env, path::PathBuf};
 
+use foyer::{Cache, CacheBuilder};
 use log::trace;
 
 use crate::error::CliError;
@@ -17,5 +18,6 @@ impl ExecutionContext {
         let project_root = env::current_dir()?;
         trace!("Project root: {:?}", project_root);
         Ok(Self { project_root })
+        
     }
 }
