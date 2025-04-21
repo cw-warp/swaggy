@@ -6,6 +6,14 @@ It can generate OpenAPI spec for your smart contracts, as well as display the do
 
 ![Swaggy automatically generates documentation from your contract's code](preview.png)
 
+## Install
+
+To install `cw-swaggy`, you can download it from the crates.io repository:
+
+```sh
+cargo install cw-swaggy
+```
+
 ## The Problem
 
 Usually in enterprise environment, it is very important to have an up-to-date documentation for projects. There's two main reasons for that:
