@@ -3,15 +3,18 @@ pub mod variant_info;
 use std::collections::BTreeMap;
 
 use indexmap::{indexmap, IndexMap};
+use log::trace;
 use openapiv3::{
-    Components, Info, MediaType, NumberType, ObjectType, OpenAPI, Operation, Parameter, ParameterData, ParameterSchemaOrContent, PathItem, ReferenceOr, Response, Responses, Schema, SchemaData, SchemaKind, StatusCode, StringType, Type
+    Components, Info, MediaType, NumberType, ObjectType, OpenAPI, Operation, Parameter,
+    ParameterData, ParameterSchemaOrContent, PathItem, ReferenceOr, Response, Responses, Schema,
+    SchemaData, SchemaKind, StatusCode, StringType, Type,
 };
 use serde_json::{Map, Value};
 use variant_info::{VariantInfo, VariantParameter};
 
 use crate::error::CliError;
 
-pub fn process_idl(idl: &Value) -> Result<OpenAPI, CliError> {
+pub fn process_idl(idl: &Value, wasm_file: Option<&Vec<u8>>) -> Result<OpenAPI, CliError> {
     let mut openapi = OpenAPI {
         info: Info {
             title: idl["contract_name"].as_str().unwrap().to_owned(),
@@ -36,7 +39,18 @@ pub fn process_idl(idl: &Value) -> Result<OpenAPI, CliError> {
         ..Default::default()
     };
 
-    let messages = vec![&idl["execute"], &idl["query"]];
+    if let Some(wasm_bytes) = wasm_file {
+        let encoded = z85::encode(&wasm_bytes);
+        trace!(
+            "Encoded size factor: {:.2}%",
+            wasm_bytes.len() as f64 / encoded.len() as f64 * 100f64
+        );
+        openapi
+            .extensions
+            .insert("x-wasm".to_owned(), Value::String(encoded));
+    }
+
+    let messages = vec![&idl["execute"], &idl["query"], &idl["instantiate"]];
 
     for msg in messages {
         process_message(msg, &mut openapi);
@@ -62,80 +76,135 @@ fn extract_variants(schema_part: &Value) -> Result<Vec<VariantInfo>, CliError> {
     if let Some(one_of) = schema_part.get("oneOf") {
         if let Some(one_of_array) = one_of.as_array() {
             for variant in one_of_array {
-                let description = variant
-                    .get("description")
-                    .map(|x| x.as_str().unwrap().to_owned())
-                    .unwrap_or(String::new());
-                if let Some(enum_val) = variant.get("enum") {
-                    // If it's a simple enum (like "increment")
-                    if let Some(enum_array) = enum_val.as_array() {
-                        if let Some(name) = enum_array.get(0).and_then(|v| v.as_str()) {
-                            variants.push(VariantInfo {
-                                name: name.to_string(),
-                                description,
-                                parameters: BTreeMap::new(),
-                                read_call,
-                            });
-                        }
-                    }
-                } else if let Some(properties) = variant.get("properties") {
-                    let mut required_parameters = Vec::new();
-                    let mut parameters = BTreeMap::new();
-
-                    for (param_name, param_value) in properties.as_object().unwrap() {
-                        let properties = param_value["properties"].as_object();
-                        if properties.is_none() {
-                            variants.push(VariantInfo {
-                                name: param_name.clone(),
-                                description,
-                                parameters: BTreeMap::new(),
-                                read_call,
-                            });
-
-                            break;
-                        }
-                        let properties = properties.unwrap();
-                        let req_array = param_value["required"].as_array().unwrap();
-                        let mut req_values = req_array
-                            .iter()
-                            .map(|x| x.as_str().unwrap().to_owned())
-                            .collect::<Vec<_>>();
-                        required_parameters.append(&mut req_values);
-                        properties.iter().for_each(|(k, v)| {
-                            let param_type = if v.get("type").is_some() {
-                                v.get("type").unwrap().as_str()
-                            } else {
-                                v.get("$ref").unwrap().as_str().unwrap().split("/").last()
-                            }
-                            .unwrap()
-                            .to_owned();
-                            parameters.insert(
-                                k.to_owned(),
-                                VariantParameter {
-                                    t: param_type,
-                                    required: false,
-                                },
-                            );
-                        });
-                        required_parameters.iter().for_each(|x| {
-                            parameters
-                                .entry(x.to_owned())
-                                .and_modify(|p| p.required = true);
-                        });
-                        variants.push(VariantInfo {
-                            name: param_name.clone(),
-                            description,
-                            parameters,
-                            read_call,
-                        });
-                        break;
-                    }
-                }
+                extract_variant(&mut variants, variant, read_call, false);
             }
         }
+    } else {
+        extract_variant(&mut variants, schema_part, read_call, true);
     }
 
     Ok(variants)
+}
+
+fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: bool, single_variant: bool) {
+    let description = variant
+        .get("description")
+        .map(|x| x.as_str().unwrap().to_owned())
+        .unwrap_or(String::new());
+    if let Some(enum_val) = variant.get("enum") {
+        // If it's a simple enum (like "increment")
+        if let Some(enum_array) = enum_val.as_array() {
+            if let Some(name) = enum_array.get(0).and_then(|v| v.as_str()) {
+                variants.push(VariantInfo {
+                    name: name.to_string(),
+                    description,
+                    parameters: BTreeMap::new(),
+                    read_call,
+                });
+            }
+        }
+    } else if let Some(properties) = variant.get("properties") {
+        let mut required_parameters = Vec::new();
+        let mut parameters = BTreeMap::new();
+
+        for (param_name, param_value) in properties.as_object().unwrap() {
+            let properties = if single_variant {
+                properties.as_object()
+            }
+            else {
+                 param_value["properties"].as_object()
+            };
+            if properties.is_none() {
+                variants.push(VariantInfo {
+                    name: param_name.clone(),
+                    description,
+                    parameters: BTreeMap::new(),
+                    read_call,
+                });
+
+                break;
+            }
+            let properties = properties.unwrap();
+            let empty_vec: Vec<Value> = Vec::new();
+            let req_array = param_value["required"].as_array().unwrap_or(&empty_vec);
+            let mut req_values = req_array
+                .iter()
+                .map(|x| x.as_str().unwrap().to_owned())
+                .collect::<Vec<_>>();
+            required_parameters.append(&mut req_values);
+            properties.iter().for_each(|(k, v)| {
+                let param_type = if v.get("type").is_some() {
+                    let t = v.get("type").unwrap();
+                    match t {
+                        Value::String(str) => str.to_owned(),
+                        Value::Array(arr) => arr.first().unwrap().as_str().unwrap().to_owned(),
+                        _ => "".to_owned(),
+                    }
+                } else {
+                    let any_of = v.get("anyOf");
+                    let t = if any_of.is_some() {
+                        let allowed_types = any_of
+                            .unwrap()
+                            .as_array()
+                            .unwrap_or(&Vec::new())
+                            .iter()
+                            .map(|x| {
+                                let t_ref = x.get("$ref");
+                                if t_ref.is_some() {
+                                    return t_ref
+                                        .unwrap()
+                                        .as_str()
+                                        .unwrap()
+                                        .split("/")
+                                        .last()
+                                        .unwrap()
+                                        .to_owned();
+                                } else {
+                                    return x.get("type").unwrap().as_str().unwrap().to_owned();
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        // For now let's only take the main type
+                        // TODO: Account for type complexity
+                        allowed_types.first().cloned().unwrap()
+                    } else {
+                        v.get("$ref")
+                            .unwrap()
+                            .as_str()
+                            .unwrap()
+                            .split("/")
+                            .last()
+                            .map(|x| x.to_owned())
+                            .unwrap()
+                    };
+                    t
+                };
+                parameters.insert(
+                    k.to_owned(),
+                    VariantParameter {
+                        t: param_type,
+                        required: false,
+                    },
+                );
+            });
+            required_parameters.iter().for_each(|x| {
+                parameters
+                    .entry(x.to_owned())
+                    .and_modify(|p| p.required = true);
+            });
+            let v_item =VariantInfo {
+                name: if single_variant { variant.get("title").unwrap().as_str().unwrap().to_owned() } else { param_name.clone() },
+                description,
+                parameters,
+                read_call,
+            };
+            if single_variant {
+                println!("\n{:?}", &v_item);
+            }
+            variants.push(v_item);
+            break;
+        }
+    }
 }
 
 fn generate_path_item(variant: &VariantInfo, api: &mut OpenAPI) {
@@ -144,7 +213,7 @@ fn generate_path_item(variant: &VariantInfo, api: &mut OpenAPI) {
         .parameters
         .iter()
         .map(|x| {
-             let param = Parameter::Query {
+            let param = Parameter::Query {
                 parameter_data: resolve_parameter_data(x.0, x.1),
                 allow_reserved: false,
                 style: openapiv3::QueryStyle::Form,
@@ -154,7 +223,15 @@ fn generate_path_item(variant: &VariantInfo, api: &mut OpenAPI) {
         })
         .collect::<Vec<_>>();
     let result_obj_type = MediaType {
-        schema: Some(ReferenceOr::Item(Schema { schema_data: SchemaData { title: Some("Response from the chain".to_owned()), ..Default::default()  }, schema_kind: SchemaKind::Type(Type::Object(ObjectType { ..Default::default() })) })),
+        schema: Some(ReferenceOr::Item(Schema {
+            schema_data: SchemaData {
+                title: Some("Response from the chain".to_owned()),
+                ..Default::default()
+            },
+            schema_kind: SchemaKind::Type(Type::Object(ObjectType {
+                ..Default::default()
+            })),
+        })),
         example: Some(Value::Object(Map::new())),
         ..Default::default()
     };

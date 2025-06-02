@@ -1,7 +1,23 @@
 [package]
-name = "swaggy"
-version = "0.1.0"
+name = "cw-swaggy"
+description = "Interactive documentation for CosmWasm smart contracts with a simple command"
+version = "0.1.1"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/cw-warp/swaggy"
+keywords = ["cosmwasm", "openapi", "swagger", "cryptocurrency", "blockchain"]
+authors = [ "Reyth<mrreynevan2@gmail.com>"]
+readme = "README.md"
+
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
+opt-level = "z"
+debug = false
+panic = "abort"
+incremental = true
 
 [dependencies]
 axum = "0.8.3"
@@ -15,4 +31,8 @@ serde = "1.0.219"
 serde_json = "1.0.140"
 thiserror = "2.0.12"
 tokio = { version = "1.44.2", features = ["full"] }
+z85 = "3.0.6"
 
+[[bin]]
+name = "swaggy"
+path = "src/main.rs"

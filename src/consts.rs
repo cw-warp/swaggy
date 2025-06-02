@@ -4,3 +4,4 @@ pub const SWAGGER_ES_BUNDLE: &'static [u8] = include_bytes!("../swagger/swagger-
 pub const SWAGGER_STANDALONE: &'static [u8] =
     include_bytes!("../swagger/swagger-ui-standalone-preset.js");
 pub const SWAGGER_CSS: &'static [u8] = include_bytes!("../swagger/swagger-ui.css");
+pub const SWAGGER_JS: &'static [u8] = include_bytes!("../swagger/swagger-ui.js");

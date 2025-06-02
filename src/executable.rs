@@ -17,5 +17,6 @@ impl ExecutionContext {
         let project_root = env::current_dir()?;
         trace!("Project root: {:?}", project_root);
         Ok(Self { project_root })
+        
     }
 }
