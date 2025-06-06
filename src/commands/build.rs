@@ -12,9 +12,6 @@ use crate::{
 pub struct BuildCmd {
     /// The cosmwasm-schema file to use
     pub schema: PathBuf,
-    /// Optional wasm binary file to include in the documentation file
-    #[arg(short, long)]
-    pub wasm: Option<PathBuf>,
 }
 
 impl Executable for BuildCmd {
@@ -23,15 +20,7 @@ impl Executable for BuildCmd {
         let idl = crate::idl_loader::try_load(&dir_string)?;
         info!("IDL file loaded successfully.");
 
-        let wasm_file = if let Some(w) = &self.wasm {
-            info!("Reading the wasm file...");
-            std::fs::read(w).ok()
-        }
-        else {
-            trace!("No wasm binary provided - it will not be included.");
-            None
-        };
-        let api = crate::idl_processor::process_idl(&idl, wasm_file.as_ref())?;
+        let api = crate::idl_processor::process_idl(&idl)?;
         let api = serde_json::to_string_pretty(&api)?;
         fs::write(self.schema.join("swagger.json"), &api)?;
         Ok(())

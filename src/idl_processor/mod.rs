@@ -12,14 +12,14 @@ use openapiv3::{
 use serde_json::{Map, Value};
 use variant_info::{VariantInfo, VariantParameter};
 
-use crate::error::CliError;
+use crate::{error::CliError, idl_loader::loaded_idl::LoadedIdl};
 
-pub fn process_idl(idl: &Value, wasm_file: Option<&Vec<u8>>) -> Result<OpenAPI, CliError> {
+pub fn process_idl(idl: &Vec<LoadedIdl>) -> Result<OpenAPI, CliError> {
     let mut openapi = OpenAPI {
         info: Info {
-            title: idl["contract_name"].as_str().unwrap().to_owned(),
-            description: Some("CosmWasm Smart Contract Documentation".to_owned()),
-            version: idl["contract_version"].as_str().unwrap().to_owned(),
+            title: "CosmWasm Swaggy Documentation".to_owned(),
+            description: Some("CosmWasm workspace documentation".to_owned()),
+            version: "0.1.0".to_owned(),
             ..Default::default()
         },
         paths: Default::default(),
@@ -39,34 +39,40 @@ pub fn process_idl(idl: &Value, wasm_file: Option<&Vec<u8>>) -> Result<OpenAPI, 
         ..Default::default()
     };
 
-    if let Some(wasm_bytes) = wasm_file {
-        let encoded = z85::encode(&wasm_bytes);
-        trace!(
-            "Encoded size factor: {:.2}%",
-            wasm_bytes.len() as f64 / encoded.len() as f64 * 100f64
-        );
-        openapi
-            .extensions
-            .insert("x-wasm".to_owned(), Value::String(encoded));
+    // Handing each contract separately
+    for contract_idl in idl.iter() {
+        let wasm_file = contract_idl.wasm.as_ref();
+        if let Some(wasm_bytes) = wasm_file {
+            let encoded = z85::encode(&wasm_bytes);
+            trace!(
+                "Encoded size factor: {:.2}%",
+                wasm_bytes.len() as f64 / encoded.len() as f64 * 100f64
+            );
+            openapi
+                .extensions
+                .insert("x-wasm".to_owned(), Value::String(encoded));
+        }
+
+        let idl = &contract_idl.idl;
+        let contract_tag = idl["contract_name"].as_str().unwrap();
+
+        let messages = vec![&idl["execute"], &idl["query"], &idl["instantiate"]];
+
+        for msg in messages {
+            process_message(contract_tag, msg, &mut openapi);
+        }
     }
-
-    let messages = vec![&idl["execute"], &idl["query"], &idl["instantiate"]];
-
-    for msg in messages {
-        process_message(msg, &mut openapi);
-    }
-
     Ok(openapi)
 }
 
-fn process_message(schema: &Value, api: &mut OpenAPI) {
-    let variants = extract_variants(schema).unwrap();
+fn process_message(contract_tag: &str, schema: &Value, api: &mut OpenAPI) {
+    let variants = extract_variants(contract_tag, schema).unwrap();
     variants.iter().for_each(|x| {
         generate_path_item(x, api);
     });
 }
 
-fn extract_variants(schema_part: &Value) -> Result<Vec<VariantInfo>, CliError> {
+fn extract_variants(contract_tag: &str, schema_part: &Value) -> Result<Vec<VariantInfo>, CliError> {
     let mut variants = Vec::new();
     let read_call = if schema_part.get("title").unwrap().as_str().unwrap() == "QueryMsg" {
         true
@@ -76,17 +82,23 @@ fn extract_variants(schema_part: &Value) -> Result<Vec<VariantInfo>, CliError> {
     if let Some(one_of) = schema_part.get("oneOf") {
         if let Some(one_of_array) = one_of.as_array() {
             for variant in one_of_array {
-                extract_variant(&mut variants, variant, read_call, false);
+                extract_variant(&mut variants, variant, read_call, false, contract_tag);
             }
         }
     } else {
-        extract_variant(&mut variants, schema_part, read_call, true);
+        extract_variant(&mut variants, schema_part, read_call, true, contract_tag);
     }
 
     Ok(variants)
 }
 
-fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: bool, single_variant: bool) {
+fn extract_variant(
+    variants: &mut Vec<VariantInfo>,
+    variant: &Value,
+    read_call: bool,
+    single_variant: bool,
+    contract_tag: &str,
+) {
     let description = variant
         .get("description")
         .map(|x| x.as_str().unwrap().to_owned())
@@ -100,6 +112,7 @@ fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: 
                     description,
                     parameters: BTreeMap::new(),
                     read_call,
+                    contract_tag: contract_tag.to_string(),
                 });
             }
         }
@@ -110,9 +123,8 @@ fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: 
         for (param_name, param_value) in properties.as_object().unwrap() {
             let properties = if single_variant {
                 properties.as_object()
-            }
-            else {
-                 param_value["properties"].as_object()
+            } else {
+                param_value["properties"].as_object()
             };
             if properties.is_none() {
                 variants.push(VariantInfo {
@@ -120,6 +132,7 @@ fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: 
                     description,
                     parameters: BTreeMap::new(),
                     read_call,
+                    contract_tag: contract_tag.to_string(),
                 });
 
                 break;
@@ -192,15 +205,17 @@ fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: 
                     .entry(x.to_owned())
                     .and_modify(|p| p.required = true);
             });
-            let v_item =VariantInfo {
-                name: if single_variant { variant.get("title").unwrap().as_str().unwrap().to_owned() } else { param_name.clone() },
+            let v_item = VariantInfo {
+                name: if single_variant {
+                    variant.get("title").unwrap().as_str().unwrap().to_owned()
+                } else {
+                    param_name.clone()
+                },
                 description,
                 parameters,
                 read_call,
+                contract_tag: contract_tag.to_string(),
             };
-            if single_variant {
-                println!("\n{:?}", &v_item);
-            }
             variants.push(v_item);
             break;
         }
@@ -208,7 +223,7 @@ fn extract_variant(variants: &mut Vec<VariantInfo>, variant: &Value, read_call: 
 }
 
 fn generate_path_item(variant: &VariantInfo, api: &mut OpenAPI) {
-    let path_name = format!("/{}", &variant.name);
+    let path_name = format!("/{}/{}", &variant.contract_tag, &variant.name);
     let params = variant
         .parameters
         .iter()
@@ -260,6 +275,7 @@ fn generate_path_item(variant: &VariantInfo, api: &mut OpenAPI) {
         ),
         description: Some(variant.description.to_owned()),
         parameters: params,
+        tags: vec![variant.contract_tag.to_owned()],
         ..Default::default()
     };
     let variant_value = serde_json::to_value(&variant).unwrap();

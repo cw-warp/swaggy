@@ -98,7 +98,7 @@
                         const swaggerDocument = await fetch("/api").then((res) => res.json());
 
                         const to = window.connection.contractAddress;
-                        const functionName = req.pathName.replace("/", "");
+                        const functionName = req.pathname.split("/").pop();
 
                         if (!to && functionName != "InstantiateMsg") throw new Error("Missing required parameter: contractAddress");
                         const paramValues = [];
