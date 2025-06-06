@@ -8,4 +8,6 @@ pub enum IdlError {
     JsonDeserializeError(#[from] serde_json::Error),
     #[error("IO Error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("Path Error: {0}")]
+    PathError(#[from] std::path::StripPrefixError),
 }
