@@ -50,6 +50,7 @@ jobs:
             target/release/swaggy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: github.ref_type == 'tag'
 
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}

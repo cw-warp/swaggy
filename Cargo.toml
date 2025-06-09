@@ -1,12 +1,12 @@
 [package]
 name = "cw-swaggy"
 description = "Interactive documentation for CosmWasm smart contracts with a simple command"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/cw-warp/swaggy"
 keywords = ["cosmwasm", "openapi", "swagger", "cryptocurrency", "blockchain"]
-authors = [ "Reyth<mrreynevan2@gmail.com>"]
+authors = ["Reyth<mrreynevan2@gmail.com>"]
 readme = "README.md"
 
 
